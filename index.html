@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Strategy Room</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+</style>
+</head>
+
+<body class="bg-zinc-950 h-screen flex flex-col text-white overflow-hidden">
+
+<!-- HEADER -->
+<header class="p-6 border-b border-zinc-800 flex justify-between items-center">
+  <div>
+    <h1 class="text-indigo-400 tracking-[0.3em] uppercase text-2xl">Strategy Room</h1>
+    <p id="status" class="text-xs text-zinc-500 mt-2 uppercase">
+      Awaiting Session
+    </p>
+  </div>
+
+  <div class="flex gap-4">
+    <button id="startBtn"
+      onclick="runDebate()"
+      class="bg-indigo-600 px-8 py-3 text-xs font-black uppercase tracking-widest">
+      Start
+    </button>
+
+    <button onclick="resetSession()"
+      class="border border-zinc-700 px-6 py-3 text-xs uppercase tracking-widest text-zinc-400 hover:bg-zinc-800">
+      Reset
+    </button>
+  </div>
+</header>
+
+<!-- CHAT -->
+<main id="chat"
+  class="flex-1 overflow-y-auto p-10 space-y-12 scroll-smooth">
+</main>
+
+<!-- CONSENSUS PANEL -->
+<div id="consensus"
+ class="hidden fixed right-6 bottom-6 w-[440px] max-h-[80vh]
+        bg-emerald-500 text-black p-6 shadow-2xl overflow-y-auto">
+
+  <h2 class="text-xs font-black tracking-[0.4em] uppercase mb-3">
+    Final Consensus
+  </h2>
+
+  <div id="consensusText"
+       class="text-sm leading-relaxed whitespace-pre-line">
+  </div>
+</div>
+
+<script>
+let chatHistory = [];
+let role = "for";
+let running = false;
+let thinkingBubbleId = null;
+
+/* ---------------- ROLE INTRO ---------------- */
+function showRoleIntro() {
+  const chat = document.getElementById("chat");
+
+  const intro = document.createElement("div");
+  intro.className = "border border-zinc-800 p-6 text-sm text-zinc-400 bg-zinc-900";
+
+  intro.innerHTML = `
+    <p class="uppercase tracking-widest text-xs mb-2 text-indigo-400">
+      Debate Roles
+    </p>
+    <p><strong class="text-white">Alex</strong> — FOR (Marketing-first strategy)</p>
+    <p><strong class="text-white">Sam</strong> — AGAINST (Sales-first strategy)</p>
+  `;
+
+  chat.appendChild(intro);
+}
+
+/* ---------------- THINKING INDICATOR ---------------- */
+function showThinking(name) {
+  const chat = document.getElementById("chat");
+
+  const div = document.createElement("div");
+  thinkingBubbleId = "thinking-" + Date.now();
+  div.id = thinkingBubbleId;
+
+  div.className = `text-xs uppercase tracking-widest text-zinc-500 ${
+    name === "Alex" ? "" : "text-right ml-auto"
+  }`;
+
+  div.innerText = `${name} is thinking...`;
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeThinking() {
+  if (thinkingBubbleId) {
+    const el = document.getElementById(thinkingBubbleId);
+    if (el) el.remove();
+    thinkingBubbleId = null;
+  }
+}
+
+/* ---------------- RUN DEBATE ---------------- */
+async function runDebate() {
+  if (running) return;
+  running = true;
+
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("status").innerText = "Debate in Progress";
+
+  showRoleIntro();
+
+  for (let i = 0; i < 8; i++) {
+    const agentName = role === "for" ? "Alex" : "Sam";
+    showThinking(agentName);
+
+    const res = await fetch("http://127.0.0.1:5000/debate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ role, history: chatHistory })
+    });
+
+    const data = await res.json();
+    removeThinking();
+    addBubble(data.agentName, data.message);
+
+    chatHistory.push({
+      role: "user",
+      content: `${data.agentName}: ${data.message}`
+    });
+
+    role = data.nextRole;
+    await new Promise(r => setTimeout(r, 800));
+  }
+
+  document.getElementById("status").innerText = "Generating Consensus";
+  await fetchConclusion();
+}
+
+/* ---------------- FETCH CONSENSUS ---------------- */
+async function fetchConclusion() {
+  const res = await fetch("http://127.0.0.1:5000/conclusion", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ history: chatHistory })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("consensusText").innerText = data.conclusion;
+  document.getElementById("consensus").classList.remove("hidden");
+  document.getElementById("consensus").scrollTop =
+    document.getElementById("consensus").scrollHeight;
+
+  document.getElementById("status").innerText = "Consensus Reached";
+}
+
+/* ---------------- CHAT BUBBLES ---------------- */
+function addBubble(name, text) {
+  const chat = document.getElementById("chat");
+
+  const div = document.createElement("div");
+  div.className = `max-w-3xl ${name === "Alex" ? "" : "ml-auto"}`;
+
+  div.innerHTML = `
+    <p class="text-xs uppercase tracking-widest text-zinc-500 mb-2">${name}</p>
+    <div class="p-6 text-lg leading-relaxed border-b-4 shadow-xl
+      ${name === "Alex"
+        ? "bg-zinc-50 text-black border-indigo-600"
+        : "bg-zinc-800 border-emerald-500"}">
+      ${text}
+    </div>
+  `;
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------------- RESET ---------------- */
+function resetSession() {
+  chatHistory = [];
+  role = "for";
+  running = false;
+  thinkingBubbleId = null;
+
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("consensusText").innerText = "";
+  document.getElementById("consensus").classList.add("hidden");
+  document.getElementById("status").innerText = "Awaiting Session";
+
+  document.getElementById("startBtn").disabled = false;
+}
+</script>
+
+</body>
+</html>
