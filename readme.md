@@ -16,7 +16,9 @@ This project demonstrates structured multi-agent reasoning, debate orchestration
 - **Execution Mode**: Fully Local (Ollama)
 
 ---
-
+## Screenshot
+<img width="1908" height="900" alt="image" src="https://github.com/user-attachments/assets/59b2c10f-dccb-4643-99a6-ff16864a6fbd" />
+---
 ## ⚙️ System Architecture
 
 ```text
